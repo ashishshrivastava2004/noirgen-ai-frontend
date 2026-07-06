@@ -13,8 +13,58 @@ promptInput.addEventListener('keypress', function(e) {
     }
 });
 
-// 4. Main Generation Function
-function handleGeneration() {
+// NAYA FUNCTION: API se connect karne ke liye
+async function generateNoirGenResponse(prompt) {
+    // config.js se API key uthana
+    const apiKey = config.FIREWORKS_API_KEY; 
+    const url = "https://api.fireworks.ai/inference/v1/chat/completions";
+
+    // System prompt setup to define the AI's persona (Wong Kar-wai style added here)
+    const systemPrompt = `You are an elite, autonomous Art Director for NoirGen AI. 
+    Translate the user's scene description into a high-end, production-ready director's treatment. 
+    Respond with exact hex color palettes (provide 4 hex codes), specific 35mm lens recommendations, and precise 3D HDRI lighting setups. 
+    Maintain a cinematic, Wong Kar-wai inspired tone. Keep the response concise. Format the response strictly as a JSON object with these keys: visual_mood, color_palette (array of strings), camera_lens, blender_3d_setup.`;
+
+    const data = {
+        model: "accounts/fireworks/models/gemma-7b-it",
+        messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt }
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+        response_format: { type: "json_object" } // Asking the API to return JSON for easy formatting
+    };
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify(data)
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const result = await response.json();
+        const aiOutputString = result.choices[0].message.content;
+        
+        // Parse the JSON string returned by the AI
+        return JSON.parse(aiOutputString);
+
+    } catch (error) {
+        console.error("Error generating response:", error);
+        return null;
+    }
+}
+
+
+// 4. Main Generation Function (AB ASALI API USE KAREGA)
+async function handleGeneration() {
     const promptValue = promptInput.value.trim();
     
     // Agar input khali hai, toh kuch mat karo
@@ -23,26 +73,21 @@ function handleGeneration() {
     // Loading State dikhana
     outputContainer.classList.remove('hidden');
     outputContainer.innerHTML = '<div class="loader">🎬 Visualizing scene & calculating 3D nodes...</div>';
+    generateBtn.disabled = true; // Button disable karna taaki multiple clicks na hon
 
-    // 2 Second ka Fake Delay (API ki tarah simulate karne ke liye)
-    setTimeout(() => {
-        
-        // 7 July ko yahan asli Fireworks API ka fetch() function aayega
-        // Abhi ke liye humara cinematic dummy data (Wong Kar-wai style with modern touch)
-        const dummyResponse = {
-            visual_mood: "Cinematic Noir. Heavy influence of Wong Kar-wai. Smudged neon lights reflecting off wet pavement, melancholic atmosphere, and deep, saturated shadows. The modern accessories (headphones) contrast beautifully with the vintage lighting.",
-            color_palette: ["#020617", "#9F1239", "#F59E0B", "#1E3A8A"],
-            camera_lens: "Shot on 35mm spherical lens, f/1.4 for a highly isolated subject and buttery bokeh.",
-            blender_3d_setup: "HDRI: 'Midnight City Street' (low intensity). Key Light: Red neon tube light (Emission strength 50). Volumetric scattering set to 0.05."
-        };
+    // AI API ko call karna aur wait karna
+    const aiResponse = await generateNoirGenResponse(promptValue);
 
+    if (aiResponse) {
         // Colors ke liye HTML generate karna
         let colorsHtml = '';
-        dummyResponse.color_palette.forEach(color => {
-            colorsHtml += `<div class="color-swatch" style="background-color: ${color};" title="${color}"></div>`;
-        });
+        if (aiResponse.color_palette && Array.isArray(aiResponse.color_palette)) {
+            aiResponse.color_palette.forEach(color => {
+                colorsHtml += `<div class="color-swatch" style="background-color: ${color};" title="${color}"></div>`;
+            });
+        }
 
-        // Output Card mein Result inject karna
+        // Output Card mein asali AI Result inject karna
         outputContainer.innerHTML = `
             <h3 style="color: #F59E0B; margin-bottom: 20px;">✨ Director's Treatment</h3>
             
@@ -56,17 +101,17 @@ function handleGeneration() {
             <div style="display: grid; grid-template-columns: 1fr; gap: 20px;">
                 <div>
                     <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 5px;">VISUAL MOOD</p>
-                    <p>${dummyResponse.visual_mood}</p>
+                    <p>${aiResponse.visual_mood || 'Data unavailable'}</p>
                 </div>
                 
                 <div>
                     <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 5px;">CAMERA & LENS</p>
-                    <p>${dummyResponse.camera_lens}</p>
+                    <p>${aiResponse.camera_lens || 'Data unavailable'}</p>
                 </div>
                 
                 <div>
                     <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem; margin-bottom: 5px;">BLENDER 3D SETUP</p>
-                    <p>${dummyResponse.blender_3d_setup}</p>
+                    <p>${aiResponse.blender_3d_setup || 'Data unavailable'}</p>
                 </div>
                 
                 <div>
@@ -75,9 +120,17 @@ function handleGeneration() {
                 </div>
             </div>
         `;
+    } else {
+        // Agar API error de, toh user ko message dikhana
+        outputContainer.innerHTML = `
+             <div style="color: #ef4444; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
+                 <h4 style="margin-bottom: 10px;">Connection Error</h4>
+                 <p>Unable to connect to the creative core. Please check your API key and connection.</p>
+             </div>
+        `;
+    }
         
-        // Input ko clear kar dena taaki user naya prompt daal sake
-        promptInput.value = '';
-
-    }, 2000); 
+    // Input ko clear kar dena taaki user naya prompt daal sake
+    promptInput.value = '';
+    generateBtn.disabled = false; // Button wapas enable karna
 }
