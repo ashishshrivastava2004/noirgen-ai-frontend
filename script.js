@@ -13,27 +13,30 @@ promptInput.addEventListener('keypress', function(e) {
     }
 });
 
-// NAYA FUNCTION: API se connect karne ke liye
+// 4. API se connect karne ke liye Function (Groq + Gemma 7B)
 async function generateNoirGenResponse(prompt) {
-    // config.js se API key uthana
-    const apiKey = config.FIREWORKS_API_KEY; 
-    const url = "https://api.fireworks.ai/inference/v1/chat/completions";
+    // config.js se GROQ API key uthana
+    const apiKey = config.GROQ_API_KEY; 
+    
+    // URL ab Groq ka use hoga
+    const url = "https://api.groq.com/openai/v1/chat/completions";
 
-    // System prompt setup to define the AI's persona (Wong Kar-wai style added here)
-    const systemPrompt = `You are an elite, autonomous Art Director for NoirGen AI. 
+    // System prompt setup (Defining the AI's persona and strict aesthetic rules)
+    const systemPrompt = `You are an elite, autonomous Art Director for NoirGen AI (a Velyron production). 
     Translate the user's scene description into a high-end, production-ready director's treatment. 
-    Respond with exact hex color palettes (provide 4 hex codes), specific 35mm lens recommendations, and precise 3D HDRI lighting setups. 
-    Maintain a cinematic, Wong Kar-wai inspired tone. Keep the response concise. Format the response strictly as a JSON object with these keys: visual_mood, color_palette (array of strings), camera_lens, blender_3d_setup.`;
+    Respond with exact hex color palettes (provide exactly 4 hex codes), specific 35mm lens recommendations, and precise 3D HDRI lighting setups. 
+    Maintain a cinematic, Wong Kar-wai inspired tone with deep shadows and saturated lighting. Naturally incorporate modern accessories like headphones into the subject's description, but strictly avoid adding any red tilak or facial markings. 
+    Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup.`;
 
     const data = {
-        model: "accounts/fireworks/models/gemma-7b-it",
+        model: "gemma-7b-it", // Using Gemma 7B on Groq
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
         ],
         max_tokens: 500,
         temperature: 0.7,
-        response_format: { type: "json_object" } // Asking the API to return JSON for easy formatting
+        response_format: { type: "json_object" } 
     };
 
     try {
@@ -47,23 +50,23 @@ async function generateNoirGenResponse(prompt) {
         });
 
         if (!response.ok) {
+            const errBody = await response.text();
+            console.error("API Error Details:", errBody);
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
         const result = await response.json();
         const aiOutputString = result.choices[0].message.content;
         
-        // Parse the JSON string returned by the AI
         return JSON.parse(aiOutputString);
 
     } catch (error) {
         console.error("Error generating response:", error);
-        return null;
+        return null; // Error aane par null return karega taaki UI ko pata chal sake
     }
 }
 
-
-// 4. Main Generation Function (AB ASALI API USE KAREGA)
+// 5. Main Generation Function (UI Handle Karega)
 async function handleGeneration() {
     const promptValue = promptInput.value.trim();
     
@@ -73,7 +76,7 @@ async function handleGeneration() {
     // Loading State dikhana
     outputContainer.classList.remove('hidden');
     outputContainer.innerHTML = '<div class="loader">🎬 Visualizing scene & calculating 3D nodes...</div>';
-    generateBtn.disabled = true; // Button disable karna taaki multiple clicks na hon
+    generateBtn.disabled = true; 
 
     // AI API ko call karna aur wait karna
     const aiResponse = await generateNoirGenResponse(promptValue);
@@ -125,12 +128,12 @@ async function handleGeneration() {
         outputContainer.innerHTML = `
              <div style="color: #ef4444; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
                  <h4 style="margin-bottom: 10px;">Connection Error</h4>
-                 <p>Unable to connect to the creative core. Please check your API key and connection.</p>
+                 <p>Unable to connect to the Groq inference engine. Please verify your API key format.</p>
              </div>
         `;
     }
         
     // Input ko clear kar dena taaki user naya prompt daal sake
     promptInput.value = '';
-    generateBtn.disabled = false; // Button wapas enable karna
+    generateBtn.disabled = false; 
 }
