@@ -1,1 +1,0 @@
-const apiKey = "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";
