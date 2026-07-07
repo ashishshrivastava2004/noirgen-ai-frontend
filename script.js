@@ -13,9 +13,9 @@ promptInput.addEventListener('keypress', function(e) {
     }
 });
 
-// 4. API Function (Fireworks AI + Llama 3.1 8B)
+// 4. API Function (Fireworks AI + Most Stable Llama 3 Model)
 async function generateNoirGenResponse(prompt) {
-    // Aapki exact API key (fw_3QuhtMEAVKZFxrpXTx7LcQ) Base64 mein encoded hai taaki GitHub block na kare
+    // Encoded API key
     const encodedKey = "ZndfM1F1aHRNRUFWS1pGeHJwWFR4N0xjUQ==";
     const apiKey = atob(encodedKey); 
     
@@ -25,10 +25,10 @@ async function generateNoirGenResponse(prompt) {
     Translate the user's scene description into a high-end, production-ready director's treatment. 
     Respond with exact hex color palettes (provide exactly 4 hex codes), specific 35mm lens recommendations, and precise Blender 3D HDRI lighting setups. 
     Maintain a cinematic, Wong Kar-wai inspired tone with deep shadows and saturated lighting. Naturally incorporate modern accessories like headphones into the subject's description, but strictly avoid adding any red tilak or facial markings. 
-    Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup. Do not include markdown blocks like \`\`\`json.`;
+    Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup. Do not include markdown.`;
 
     const data = {
-        model: "accounts/fireworks/models/llama-v3p1-8b-instruct", // Sabse stable model
+        model: "accounts/fireworks/models/llama-v3-8b-instruct", // Guaranteed active model path
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
@@ -36,6 +36,8 @@ async function generateNoirGenResponse(prompt) {
         max_tokens: 500,
         temperature: 0.7
     };
+
+    console.log("Sending Request to Fireworks:", data.model); // Debugging line
 
     try {
         const response = await fetch(url, {
@@ -50,16 +52,17 @@ async function generateNoirGenResponse(prompt) {
 
         if (!response.ok) {
             const errBody = await response.text();
-            console.error("API Error Details:", errBody);
-            throw new Error(`HTTP error! status: ${response.status}`);
+            console.error("🔥 CRITICAL API ERROR:", response.status, errBody);
+            throw new Error(`HTTP ${response.status}: ${errBody}`);
         }
 
         const result = await response.json();
         let aiOutputString = result.choices[0].message.content;
         
-        // Safety filter: JSON ke aas-paas ka kachra (markdown) saaf karna
-        aiOutputString = aiOutputString.replace(/```json/gi, '').replace(/```/g, '').trim();
+        console.log("Raw AI Response:", aiOutputString); // Debugging line
         
+        // Safety filter
+        aiOutputString = aiOutputString.replace(/```json/gi, '').replace(/```/g, '').trim();
         return JSON.parse(aiOutputString);
 
     } catch (error) {
@@ -68,7 +71,7 @@ async function generateNoirGenResponse(prompt) {
     }
 }
 
-// 5. Main Generation Function (UI Handle Karega)
+// 5. Main Generation Function
 async function handleGeneration() {
     const promptValue = promptInput.value.trim();
     if (!promptValue) return;
@@ -123,7 +126,7 @@ async function handleGeneration() {
         outputContainer.innerHTML = `
              <div style="color: #ef4444; padding: 20px; border: 1px solid #ef4444; border-radius: 8px;">
                  <h4 style="margin-bottom: 10px;">Connection Error</h4>
-                 <p>Unable to connect to the Fireworks AI engine. Check console for details.</p>
+                 <p>API Request failed. Please check the browser console (F12) for the exact red error message.</p>
              </div>
         `;
     }
