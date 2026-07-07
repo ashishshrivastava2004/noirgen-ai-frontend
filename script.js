@@ -28,7 +28,7 @@ async function generateNoirGenResponse(prompt) {
     Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup. Do not include markdown.`;
 
     const data = {
-        model: "accounts/fireworks/models/llama-v3p1-8b-instruct", // 100% Active model path
+        model: "accounts/fireworks/models/firefunction-v2", // 100% Active model path
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
