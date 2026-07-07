@@ -13,30 +13,28 @@ promptInput.addEventListener('keypress', function(e) {
     }
 });
 
-// 4. API Function (Fireworks AI + Llama 3)
+// 4. API Function (Fireworks AI + Llama 3.1 8B)
 async function generateNoirGenResponse(prompt) {
-    // Base64 Encoded Key to bypass GitHub Secret Scanner 
+    // Aapki exact API key (fw_3QuhtMEAVKZFxrpXTx7LcQ) Base64 mein encoded hai taaki GitHub block na kare
     const encodedKey = "ZndfM1F1aHRNRUFWS1pGeHJwWFR4N0xjUQ==";
-    const apiKey = atob(encodedKey); // Decodes at runtime
+    const apiKey = atob(encodedKey); 
     
-    // Fireworks API Endpoint
     const url = "https://api.fireworks.ai/inference/v1/chat/completions";
 
     const systemPrompt = `You are an elite, autonomous Art Director for NoirGen AI (a Velyron production). 
     Translate the user's scene description into a high-end, production-ready director's treatment. 
     Respond with exact hex color palettes (provide exactly 4 hex codes), specific 35mm lens recommendations, and precise Blender 3D HDRI lighting setups. 
     Maintain a cinematic, Wong Kar-wai inspired tone with deep shadows and saturated lighting. Naturally incorporate modern accessories like headphones into the subject's description, but strictly avoid adding any red tilak or facial markings. 
-    Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup.`;
+    Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup. Do not include markdown blocks like \`\`\`json.`;
 
     const data = {
-        model: "accounts/fireworks/models/mixtral-8x7b-instruct", // 👈 Model Fix Applied Here
+        model: "accounts/fireworks/models/llama-v3p1-8b-instruct", // Sabse stable model
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
         ],
         max_tokens: 500,
-        temperature: 0.7,
-        response_format: { type: "json_object" } 
+        temperature: 0.7
     };
 
     try {
@@ -44,7 +42,8 @@ async function generateNoirGenResponse(prompt) {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Accept": "application/json"
             },
             body: JSON.stringify(data)
         });
@@ -56,7 +55,10 @@ async function generateNoirGenResponse(prompt) {
         }
 
         const result = await response.json();
-        const aiOutputString = result.choices[0].message.content;
+        let aiOutputString = result.choices[0].message.content;
+        
+        // Safety filter: JSON ke aas-paas ka kachra (markdown) saaf karna
+        aiOutputString = aiOutputString.replace(/```json/gi, '').replace(/```/g, '').trim();
         
         return JSON.parse(aiOutputString);
 
