@@ -13,7 +13,7 @@ promptInput.addEventListener('keypress', function(e) {
     }
 });
 
-// 4. API Function (Fireworks AI + Gemma 7B)
+// 4. API Function (Fireworks AI + Llama 3)
 async function generateNoirGenResponse(prompt) {
     // Base64 Encoded Key to bypass GitHub Secret Scanner 
     const encodedKey = "ZndfM1F1aHRNRUFWS1pGeHJwWFR4N0xjUQ==";
@@ -29,7 +29,7 @@ async function generateNoirGenResponse(prompt) {
     Keep the response concise. Format the response strictly as a JSON object with these exact keys: visual_mood, color_palette, camera_lens, blender_3d_setup.`;
 
     const data = {
-        model: "accounts/fireworks/models/gemma-7b-it", 
+        model: "accounts/fireworks/models/llama-v3-8b-instruct", // 👈 Model Fix Applied Here
         messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: prompt }
