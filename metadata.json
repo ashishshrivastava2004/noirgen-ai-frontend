@@ -1,6 +1,6 @@
 {
   "name": "NoirGen AI",
-  "description": "High-end visual treatment and pre-production assistant for filmmakers, directors, and production houses, powered by Fireworks AI.",
+  "description": "High-end visual treatment and pre-production assistant for filmmakers, directors, and production houses, powered by the Gemini API.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

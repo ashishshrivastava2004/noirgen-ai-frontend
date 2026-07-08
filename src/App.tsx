@@ -346,24 +346,24 @@ export default function App() {
             <a href="#suite" className="hover:text-white transition-colors">Interactive Suite</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
             <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
-            <button 
-              onClick={() => setShowRulesModal(true)} 
+            <a 
+              href="#rules" 
               className="hover:text-white text-amber-orange/90 flex items-center gap-1 transition-colors text-sm font-mono uppercase tracking-wider"
             >
               <Scale className="w-3.5 h-3.5" /> Rules
-            </button>
+            </a>
           </nav>
 
           {/* Call to Action & Settings */}
           <div className="flex items-center gap-2 sm:gap-3">
-            <button 
-              onClick={() => setShowRulesModal(true)}
+            <a 
+              href="#rules"
               className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-lg border border-noir-700 bg-noir-800 hover:bg-noir-700 text-gray-300 hover:text-white text-xs font-mono flex items-center gap-1.5 transition-all"
               title="Creative Guidelines & Rules"
             >
               <Scale className="w-3.5 h-3.5 text-amber-orange" />
               <span>Rules</span>
-            </button>
+            </a>
 
             {userSubscription.active ? (
               <div className="flex items-center gap-2.5 bg-amber-950/40 border border-amber-500/30 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg text-xs font-semibold text-amber-400">
@@ -1353,6 +1353,80 @@ export default function App() {
             </motion.div>
 
           </motion.div>
+        </section>
+
+        {/* Creative Guidelines & Content Rules Section */}
+        <section id="rules" className="max-w-4xl mx-auto px-4 sm:px-6 py-16 no-print border-t border-noir-900/60">
+          <div className="text-center mb-10">
+            <div className="inline-flex items-center gap-1.5 text-amber-orange font-mono text-xs uppercase tracking-wider mb-2">
+              <Scale className="w-4 h-4" />
+              <span>Creative Guidelines</span>
+            </div>
+            <h2 className="font-display text-2xl sm:text-3xl font-bold text-white tracking-tight">
+              Platform Rules & Compliance
+            </h2>
+            <p className="text-xs text-gray-400 mt-2 max-w-md mx-auto">
+              Please review our creative and compliance guidelines to ensure safe and responsible use of AI lookbook generation.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Permitted content */}
+            <div className="bg-noir-900 border border-noir-800 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-2 border-b border-noir-850 pb-3">
+                <div className="w-8 h-8 rounded-lg bg-emerald-950/40 text-emerald-400 border border-emerald-500/20 flex items-center justify-center">
+                  <Check className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-sm text-white uppercase tracking-wider font-mono">Permitted Material</h3>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                You have full creative freedom to draft pre-production treatments across all primary genres:
+              </p>
+              <ul className="space-y-2.5 text-xs text-gray-300 pl-1">
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold">•</span>
+                  <span><strong>Multiple Genres:</strong> Horror, Suspense, Sci-Fi, Thriller, Historical Drama, Comedy, and Action.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-emerald-400 font-bold">•</span>
+                  <span><strong>Romantic & Kissing:</strong> You are fully allowed to configure sets, lighting temperatures, and lens setups for kissing, hugging, and intimate dramatic scenes.</span>
+                </li>
+              </ul>
+            </div>
+
+            {/* Prohibited content */}
+            <div className="bg-noir-900 border border-noir-800 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center gap-2 border-b border-noir-850 pb-3">
+                <div className="w-8 h-8 rounded-lg bg-red-950/40 text-red-400 border border-red-500/20 flex items-center justify-center">
+                  <X className="w-4 h-4" />
+                </div>
+                <h3 className="font-bold text-sm text-white uppercase tracking-wider font-mono">Strictly Prohibited</h3>
+              </div>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                To prevent misuse, standard automated filters flag restricted concepts:
+              </p>
+              <ul className="space-y-2.5 text-xs text-gray-300 pl-1">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-400 font-bold">•</span>
+                  <span><strong>Explicit Material:</strong> Prompts detailing sexually explicit scenes, graphic physical acts, or anatomical elements are blocked.</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-400 font-bold">•</span>
+                  <span><strong>Highly Suggestive content:</strong> Prompts requesting pornography, erotic artwork, or physical nudity violate creative policies.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="mt-6 p-4 bg-amber-950/15 border border-amber-500/20 rounded-xl flex items-start gap-3">
+            <Info className="w-5 h-5 text-amber-orange shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <h4 className="text-xs font-bold text-white uppercase font-mono tracking-wide">Warning & Subscription Actions</h4>
+              <p className="text-xs text-gray-400 leading-relaxed">
+                Violating policies triggers a first-warning alert. Attempting to bypass safety filters a second time will cause <strong>automatic termination</strong> of the subscription plan to maintain platform safety.
+              </p>
+            </div>
+          </div>
         </section>
 
         {/* FAQ Accordion Section */}
