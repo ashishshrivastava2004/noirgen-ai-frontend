@@ -66,8 +66,29 @@ The JSON structure MUST match exactly this schema:
 
     const userPrompt = `Genre: ${genre}\nLighting Base: ${lighting}\nScene Description: ${prompt}`;
 
-    // 1. Text JSON Generate using Gemini
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+    // 1. Text JSON Generate using Gemini (select a model that supports generateContent)
+    const modelsListRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+    if (!modelsListRes.ok) {
+      throw new Error(`Failed to list Gemini models: ${await modelsListRes.text()}`);
+    }
+
+    const modelsList = await modelsListRes.json();
+    const modelsArray = Array.isArray(modelsList.models) ? modelsList.models : [];
+
+    const pick = modelsArray.find((m: any) => {
+      const name = String(m.name || '').toLowerCase();
+      const display = String(m.displayName || '').toLowerCase();
+      const methods = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+      return (name.includes('gemini') || display.includes('gemini')) && methods.includes('generateContent');
+    }) || modelsArray.find((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'));
+
+    if (!pick) {
+      const available = modelsArray.map((m: any) => `${m.name || m.displayName || 'unknown'}`).join(', ');
+      throw new Error(`No model found that supports generateContent. Available models: ${available}`);
+    }
+
+    const modelName = pick.name || pick.displayName;
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -81,7 +102,18 @@ The JSON structure MUST match exactly this schema:
     }
 
     const geminiData = await geminiResponse.json();
-    let jsonString = geminiData.candidates[0].content.parts[0].text.trim();
+    let jsonString = '';
+    if (geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+      jsonString = geminiData.candidates[0].content.parts[0].text.trim();
+    } else if (geminiData?.candidates?.[0]?.text) {
+      jsonString = geminiData.candidates[0].text.trim();
+    } else if (geminiData?.output?.[0]?.content?.text) {
+      jsonString = geminiData.output[0].content.text.trim();
+    } else if (typeof geminiData?.content === 'string') {
+      jsonString = geminiData.content.trim();
+    } else {
+      throw new Error('Unexpected Gemini response format: ' + JSON.stringify(geminiData).slice(0, 1000));
+    }
     
     if (jsonString.startsWith('```json')) jsonString = jsonString.substring(7);
     else if (jsonString.startsWith('```')) jsonString = jsonString.substring(3);
@@ -94,7 +126,7 @@ The JSON structure MUST match exactly this schema:
     try {
       const imagePrompt = `Cinematic film still, high-end production visual treatment, highly detailed, film grain, ${genre} genre, lighting: ${lighting}. Wong Kar-wai style cinematography. ${prompt}. All subjects must be wearing modern headphones. Strictly no red tilak or any facial markings. Shot on ${treatment.camera?.lens || 'Anamorphic lens'}, 8k resolution, photorealistic, masterpiece.`;
       
-      const imageResponse = await fetch('[https://api.fireworks.ai/inference/v1/image_generation/accounts/fireworks/models/flux-1-schnell](https://api.fireworks.ai/inference/v1/image_generation/accounts/fireworks/models/flux-1-schnell)', {
+      const imageResponse = await fetch('https://api.fireworks.ai/inference/v1/image_generation/accounts/fireworks/models/flux-1-schnell', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${fireworksApiKey}`,
