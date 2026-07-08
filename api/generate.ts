@@ -1,13 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Sirf POST requests allow karenge
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
   try {
-    const { prompt, settings, isSubscribed, subscriberEmail } = req.body;
+    const { prompt, settings, isSubscribed } = req.body;
 
     if (!isSubscribed) {
       return res.status(402).json({
@@ -15,16 +14,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const apiKey = process.env.FIREWORKS_API_KEY;
-    if (!apiKey) {
-      return res.status(500).json({ error: 'Server configuration error: API key missing.' });
+    // Vercel Environment Variables se keys le rahe hain
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    const fireworksApiKey = process.env.FIREWORKS_API_KEY;
+
+    if (!geminiApiKey || !fireworksApiKey) {
+      return res.status(500).json({ error: 'Server configuration error: API keys missing.' });
     }
 
     const { genre = 'Noir', lighting = 'Chiaroscuro', aspect_ratio = '16:9' } = settings || {};
 
-    // System Prompt for high-end Velyron-style output
     const systemPrompt = `You are NoirGen AI, an elite visual consultant, colorist, and camera director for premium pre-production cinema.
 Your task is to analyze the user's scene description and generate a complete high-end production-ready visual treatment.
+Always infuse a Wong Kar-wai cinematic aesthetic with rich, moody color grading, striking neon contrast, and deep shadows.
 You MUST respond with a single, highly structured JSON object ONLY. Do NOT include markdown code blocks, backticks, or any conversational text before or after the JSON.
 
 The JSON structure MUST match exactly this schema:
@@ -64,47 +66,38 @@ The JSON structure MUST match exactly this schema:
 
     const userPrompt = `Genre: ${genre}\nLighting Base: ${lighting}\nScene Description: ${prompt}`;
 
-    // 1. Fetch Text Treatment (Llama 3.1 70B)
-    const chatResponse = await fetch('https://api.fireworks.ai/inference/v1/chat/completions', {
+    // 1. Text JSON Generate using Gemini
+    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'accounts/fireworks/models/llama-v3p1-70b-instruct',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 1500
+        contents: [{ parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }],
+        generationConfig: { temperature: 0.7 }
       })
     });
 
-    if (!chatResponse.ok) {
-      throw new Error(`Fireworks API Error: ${await chatResponse.text()}`);
+    if (!geminiResponse.ok) {
+      throw new Error(`Gemini API Error: ${await geminiResponse.text()}`);
     }
 
-    const chatData = await chatResponse.json();
-    let jsonString = chatData.choices[0].message.content.trim();
+    const geminiData = await geminiResponse.json();
+    let jsonString = geminiData.candidates[0].content.parts[0].text.trim();
     
-    // Clean up markdown formatting if AI adds it
     if (jsonString.startsWith('```json')) jsonString = jsonString.substring(7);
     else if (jsonString.startsWith('```')) jsonString = jsonString.substring(3);
     if (jsonString.endsWith('```')) jsonString = jsonString.substring(0, jsonString.length - 3);
 
     const treatment = JSON.parse(jsonString.trim());
 
-    // 2. Fetch Image (Flux 1 Schnell) with customized signature aesthetic
+    // 2. Image Generate using FLUX.1 [schnell] via Fireworks
     let imageBase64 = null;
     try {
-      const imagePrompt = `Cinematic film still, high-end production visual treatment, highly detailed, film grain, ${genre} genre, lighting: ${lighting}. ${prompt}. Subjects wearing modern headphones, strictly no red tilak or facial markings. Shot on ${treatment.camera?.lens || 'Anamorphic lens'}, 8k resolution, photorealistic, masterpiece.`;
+      const imagePrompt = `Cinematic film still, high-end production visual treatment, highly detailed, film grain, ${genre} genre, lighting: ${lighting}. Wong Kar-wai style cinematography. ${prompt}. All subjects must be wearing modern headphones. Strictly no red tilak or any facial markings. Shot on ${treatment.camera?.lens || 'Anamorphic lens'}, 8k resolution, photorealistic, masterpiece.`;
       
       const imageResponse = await fetch('[https://api.fireworks.ai/inference/v1/image_generation/accounts/fireworks/models/flux-1-schnell](https://api.fireworks.ai/inference/v1/image_generation/accounts/fireworks/models/flux-1-schnell)', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${apiKey}`,
+          'Authorization': `Bearer ${fireworksApiKey}`,
           'Content-Type': 'application/json',
           'Accept': 'application/json'
         },
@@ -124,10 +117,9 @@ The JSON structure MUST match exactly this schema:
         }
       }
     } catch (imgError) {
-      console.error('Image generation failed, but continuing with text.', imgError);
+      console.error('Image generation failed, but text succeeded.', imgError);
     }
 
-    // 3. Send final response back to frontend
     res.status(200).json({
       success: true,
       treatment,
