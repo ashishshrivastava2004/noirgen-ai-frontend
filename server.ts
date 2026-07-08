@@ -20,27 +20,50 @@ async function startServer() {
   // API endpoint for generating film treatment
   app.post('/api/generate', async (req, res) => {
     try {
-      const { prompt, settings, customApiKey, isSubscribed, subscriberEmail } = req.body;
+      const { prompt, settings, isSubscribed, subscriberEmail } = req.body;
 
       // Check access permission:
-      // If no custom API key is provided, the user wants to use the developer's server-side key.
-      // In this case, they MUST have paid for a subscription plan.
-      if (!customApiKey) {
-        if (!isSubscribed) {
-          return res.status(402).json({
-            error: 'Subscription Required: To use the developer\'s shared Fireworks AI engine, you must purchase a subscription plan. Alternatively, you can configure your own Fireworks API Key in the API Sandbox for free developer use.'
-          });
-        }
-        console.log(`Processing subscription-based generation for active subscriber: ${subscriberEmail || 'Unknown'}`);
-      } else {
-        console.log('Processing developer-based generation using custom API key.');
+      // Users must have paid for a subscription plan to access the cinematic engine.
+      if (!isSubscribed) {
+        return res.status(402).json({
+          error: 'Subscription Required: To generate custom cinematic lookbook treatments, you must purchase a subscription plan. Subscribing instantly unlocks high-fidelity custom visual generation.'
+        });
       }
 
-      const apiKey = customApiKey || process.env.FIREWORKS_API_KEY;
+      // Prohibited keywords list for content safety (allows romantic/kissing, blocks explicit sexual/sensual)
+      const BLOCKED_KEYWORDS = [
+        'sex', 'sexual', 'sensual play', 'nude', 'naked', 'erotic', 'porn', 'xxx', 'intercourse', 'striptease',
+        'genital', 'penis', 'vagina', 'clitoris', 'blowjob', 'handjob', 'orgasm', 'masturbate', 'penetration',
+        'sensual massage', 'escort', 'incest', 'bestiality', 'pedophilia', 'rape', 'harassment', 'sensual touch',
+        'make love', 'making love', 'foreplay', 'lustful', 'sensuous body', 'nakedness', 'nudity', 'stripper',
+        'bondage', 'fetish', 'sensual scene', 'coitus', 'ejaculation', 'orgasmic', 'panties', 'underwear', 'lingerie model'
+      ];
+
+      const textToCheck = (prompt || '').toLowerCase();
+      let hasViolation = false;
+      let matchedWord = '';
+
+      for (const keyword of BLOCKED_KEYWORDS) {
+        if (textToCheck.includes(keyword)) {
+          hasViolation = true;
+          matchedWord = keyword;
+          break;
+        }
+      }
+
+      if (hasViolation || /\b(sexy|naked|erotic|pornographic|bedroom action|heavy petting)\b/i.test(textToCheck)) {
+        return res.status(400).json({
+          error: 'Policy Violation: This prompt contains restricted sexual or highly sensual content. Romantic and kissing set designs are fully permitted, but sexually explicit or highly sensual descriptions violate our Creative Guidelines.'
+        });
+      }
+
+      console.log(`Processing subscription-based generation for active subscriber: ${subscriberEmail || 'Unknown'}`);
+
+      const apiKey = process.env.FIREWORKS_API_KEY;
 
       if (!apiKey) {
-        return res.status(400).json({
-          error: 'Fireworks API key is not configured on the server. Please add your own custom key in the Developer Sandbox to enable live AI generation.'
+        return res.status(500).json({
+          error: 'Fireworks API key is not configured on the server. Please ensure the FIREWORKS_API_KEY environment variable is configured to enable live AI generation.'
         });
       }
 

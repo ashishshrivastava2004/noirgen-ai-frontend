@@ -26,7 +26,9 @@ import {
   Printer, 
   RefreshCw, 
   X,
-  Play
+  Play,
+  ShieldAlert,
+  Scale
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { PRESETS, PresetScene, FilmTreatment } from './data/presets';
@@ -58,6 +60,37 @@ const scaleInVariants = {
   }
 };
 
+// Prohibited keywords list for content safety (allows romantic/kissing, blocks explicit sexual/sensual)
+const BLOCKED_KEYWORDS = [
+  'sex', 'sexual', 'sensual play', 'nude', 'naked', 'erotic', 'porn', 'xxx', 'intercourse', 'striptease',
+  'genital', 'penis', 'vagina', 'clitoris', 'blowjob', 'handjob', 'orgasm', 'masturbate', 'penetration',
+  'sensual massage', 'escort', 'incest', 'bestiality', 'pedophilia', 'rape', 'harassment', 'sensual touch',
+  'make love', 'making love', 'foreplay', 'lustful', 'sensuous body', 'nakedness', 'nudity', 'stripper',
+  'bondage', 'fetish', 'sensual scene', 'coitus', 'ejaculation', 'orgasmic', 'panties', 'underwear', 'lingerie model'
+];
+
+function isPromptViolatingPolicy(promptText: string): { isViolating: boolean; reason?: string } {
+  const text = (promptText || '').toLowerCase();
+
+  for (const keyword of BLOCKED_KEYWORDS) {
+    if (text.includes(keyword)) {
+      return {
+        isViolating: true,
+        reason: `Restricted term detected: "${keyword}". Our Creative Guidelines strictly prohibit explicit, sexual, or highly sensual descriptions.`
+      };
+    }
+  }
+
+  if (/\b(sexy|naked|erotic|pornographic|bedroom action|heavy petting)\b/i.test(text)) {
+    return {
+      isViolating: true,
+      reason: "Our Creative Guidelines strictly prohibit explicit, highly sensual, or sexualized content."
+    };
+  }
+
+  return { isViolating: false };
+}
+
 export default function App() {
   // Application State
   const [activePreset, setActivePreset] = useState<PresetScene>(PRESETS[0]);
@@ -66,13 +99,6 @@ export default function App() {
   const [lighting, setLighting] = useState<string>(PRESETS[0].lighting);
   const [aspectRatio, setAspectRatio] = useState<string>('16:9');
   
-  // Custom API override (saved in local storage)
-  const [customApiKey, setCustomApiKey] = useState<string>(() => {
-    return localStorage.getItem('NOIRGEN_FIREWORKS_KEY') || '';
-  });
-  const [showSandbox, setShowSandbox] = useState<boolean>(false);
-  const [copiedKey, setCopiedKey] = useState<boolean>(false);
-
   // Active generated treatment state
   const [currentTreatment, setCurrentTreatment] = useState<FilmTreatment>(PRESETS[0].treatment);
   const [currentImage, setCurrentImage] = useState<string | null>(PRESETS[0].coverImage);
@@ -113,6 +139,16 @@ export default function App() {
   // Image zoom modal
   const [showZoomModal, setShowZoomModal] = useState<boolean>(false);
 
+  // Content moderation and safety policy state
+  const [violationCount, setViolationCount] = useState<number>(() => {
+    return Number(localStorage.getItem('NOIRGEN_VIOLATION_COUNT') || '0');
+  });
+  const [showViolationModal, setShowViolationModal] = useState<boolean>(false);
+  const [violationReason, setViolationReason] = useState<string>('');
+  const [showRulesModal, setShowRulesModal] = useState<boolean>(false);
+  const [showCancelledModal, setShowCancelledModal] = useState<boolean>(false);
+  const [cancelledEmailAddress, setCancelledEmailAddress] = useState<string>('');
+
   // Sync state when active preset changes
   const handleSelectPreset = (preset: PresetScene) => {
     setActivePreset(preset);
@@ -124,19 +160,6 @@ export default function App() {
     setError(null);
   };
 
-  // Save custom API key
-  const handleSaveApiKey = (key: string) => {
-    setCustomApiKey(key);
-    localStorage.setItem('NOIRGEN_FIREWORKS_KEY', key);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
-  };
-
-  const handleClearApiKey = () => {
-    setCustomApiKey('');
-    localStorage.removeItem('NOIRGEN_FIREWORKS_KEY');
-  };
-
   // Generate treatment via Fireworks AI API
   const handleGenerateTreatment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -146,14 +169,42 @@ export default function App() {
     setError(null);
     
     // Check if the user is authorized to generate custom treatments.
-    // They must either have their own API key OR have an active subscription.
-    if (!customApiKey && !userSubscription.active) {
-      setError("Subscription Required: To use the developer's shared Fireworks AI engine, you must purchase a subscription plan. Alternatively, you can configure your own free Fireworks API Key in the API Sandbox above.");
+    if (!userSubscription.active) {
+      setError("Subscription Required: To generate custom lookbook treatments via the active cinematic AI engine, please choose a plan from the pricing table below. Subscribing instantly unlocks high-fidelity generation.");
       setLoading(false);
       // Scroll smoothly to pricing section
       const pricingEl = document.getElementById('pricing');
       if (pricingEl) {
         pricingEl.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+
+    // Policy Moderation Check
+    const safetyCheck = isPromptViolatingPolicy(prompt);
+    if (safetyCheck.isViolating) {
+      setLoading(false);
+      const newCount = violationCount + 1;
+      
+      if (newCount >= 2) {
+        const userEmail = userSubscription.email || 'director@indiecinema.com';
+        setCancelledEmailAddress(userEmail);
+        
+        // Cancel subscription
+        const resetSub = { active: false, planName: '', email: '', subscriberName: '' };
+        setUserSubscription(resetSub);
+        localStorage.setItem('NOIRGEN_USER_SUBSCRIPTION', JSON.stringify(resetSub));
+        
+        // Reset violation count
+        setViolationCount(0);
+        localStorage.setItem('NOIRGEN_VIOLATION_COUNT', '0');
+        
+        setShowCancelledModal(true);
+      } else {
+        setViolationCount(newCount);
+        localStorage.setItem('NOIRGEN_VIOLATION_COUNT', String(newCount));
+        setViolationReason(safetyCheck.reason || 'Restricted content detected.');
+        setShowViolationModal(true);
       }
       return;
     }
@@ -189,7 +240,6 @@ export default function App() {
             lighting,
             aspect_ratio: aspectRatio
           },
-          customApiKey: customApiKey || undefined,
           isSubscribed: userSubscription.active,
           subscriberEmail: userSubscription.email
         })
@@ -246,8 +296,8 @@ export default function App() {
       a: "The suite utilizes Fireworks AI's state-of-the-art inference engine. We use Llama 3.1 70B Instruct to perform ultra-fast cinematic structure parsing and logic, and the FLUX-1 Schnell model to generate a pristine widescreen pre-production frame matching the exact color temperature and lens configuration."
     },
     {
-      q: "Can I use the app without an API key?",
-      a: "Absolutely! NoirGen AI comes pre-loaded with four high-fidelity production treatments (Neo-Tokyo Cyberpunk, Obsidian Desert Sci-Fi, Desaturated Moss Folk Horror, and 1970s Golden Hour Thriller). You can explore, copy, and export these treatments immediately. To run custom prompts, you can input your own Fireworks API key in our secure Developer Sandbox."
+      q: "Can I use the app without a subscription?",
+      a: "Absolutely! NoirGen AI comes pre-loaded with four high-fidelity production treatments (Neo-Tokyo Cyberpunk, Obsidian Desert Sci-Fi, Desaturated Moss Folk Horror, and 1970s Golden Hour Thriller). You can explore, copy, and export these treatments immediately. To run custom prompts and generate your own bespoke pre-production guides, you simply need to purchase a subscription plan."
     },
     {
       q: "Can the 3D VFX setup be imported into Unreal Engine or Blender?",
@@ -296,27 +346,27 @@ export default function App() {
             <a href="#suite" className="hover:text-white transition-colors">Interactive Suite</a>
             <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
             <a href="#faq" className="hover:text-white transition-colors">FAQ</a>
+            <button 
+              onClick={() => setShowRulesModal(true)} 
+              className="hover:text-white text-amber-orange/90 flex items-center gap-1 transition-colors text-sm font-mono uppercase tracking-wider"
+            >
+              <Scale className="w-3.5 h-3.5" /> Rules
+            </button>
           </nav>
 
           {/* Call to Action & Settings */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             <button 
-              onClick={() => setShowSandbox(!showSandbox)}
-              className={`p-2.5 rounded-lg border text-xs font-mono flex items-center gap-2 transition-all ${
-                customApiKey || userSubscription.active
-                  ? 'bg-emerald-950/30 border-emerald-500/30 text-emerald-400 hover:bg-emerald-950/50' 
-                  : 'bg-noir-800 border-noir-700 text-gray-400 hover:text-white hover:bg-noir-700'
-              }`}
-              title="Configure API Keys"
-              id="btn-sandbox-toggle"
+              onClick={() => setShowRulesModal(true)}
+              className="px-3 py-2 sm:px-3.5 sm:py-2.5 rounded-lg border border-noir-700 bg-noir-800 hover:bg-noir-700 text-gray-300 hover:text-white text-xs font-mono flex items-center gap-1.5 transition-all"
+              title="Creative Guidelines & Rules"
             >
-              <Settings className="w-4 h-4 animate-spin-slow" />
-              <span className="hidden sm:inline">API Sandbox</span>
-              {customApiKey && <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" />}
+              <Scale className="w-3.5 h-3.5 text-amber-orange" />
+              <span>Rules</span>
             </button>
-            
+
             {userSubscription.active ? (
-              <div className="flex items-center gap-2.5 bg-amber-950/40 border border-amber-500/30 px-4 py-2.5 rounded-lg text-xs font-semibold text-amber-400">
+              <div className="flex items-center gap-2.5 bg-amber-950/40 border border-amber-500/30 px-3 py-2 sm:px-4 sm:py-2.5 rounded-lg text-xs font-semibold text-amber-400">
                 <Zap className="w-3.5 h-3.5 text-amber-orange fill-amber-orange animate-pulse" />
                 <span className="hidden sm:inline">{userSubscription.planName}</span>
                 <span className="sm:hidden">Pro</span>
@@ -337,7 +387,7 @@ export default function App() {
             ) : (
               <a 
                 href="#pricing" 
-                className="bg-gradient-to-r from-amber-orange to-amber-500 hover:opacity-95 text-noir-950 font-semibold px-5 py-2.5 rounded-lg text-sm transition-all shadow-md shadow-orange-500/10 hover:shadow-orange-500/20 active:scale-95 animate-pulse"
+                className="bg-gradient-to-r from-amber-orange to-amber-500 hover:opacity-95 text-noir-950 font-semibold px-4 py-2 sm:px-5 sm:py-2.5 rounded-lg text-xs sm:text-sm transition-all shadow-md shadow-orange-500/10 hover:shadow-orange-500/20 active:scale-95 animate-pulse"
                 id="btn-nav-get-started"
               >
                 Subscribe
@@ -346,84 +396,6 @@ export default function App() {
           </div>
         </div>
       </header>
-
-      {/* Developer Sandbox Collapsible Panel */}
-      <AnimatePresence>
-        {showSandbox && (
-          <motion.div 
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="bg-noir-900 border-b border-noir-800 overflow-hidden no-print z-40 relative"
-          >
-            <div className="max-w-4xl mx-auto px-4 py-6 sm:px-6">
-              <div className="bg-noir-950 rounded-xl p-5 border border-noir-800 shadow-inner">
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-orange-950/50 text-amber-orange">
-                      <Cpu className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h3 className="text-sm font-semibold text-white">Developer API Sandbox</h3>
-                      <p className="text-xs text-gray-400">Configure your Fireworks AI credentials securely for custom client-side lookbook generation.</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => setShowSandbox(false)}
-                    className="p-1 rounded hover:bg-noir-800 text-gray-500 hover:text-gray-300"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5 items-end">
-                  <div className="md:col-span-2">
-                    <label className="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider">
-                      Fireworks AI API Key
-                    </label>
-                    <div className="relative">
-                      <input 
-                        type="password"
-                        placeholder="Paste your accounts/fireworks/ API key here..."
-                        value={customApiKey}
-                        onChange={(e) => handleSaveApiKey(e.target.value)}
-                        className="w-full bg-noir-900 text-white border border-noir-700 rounded-lg py-2.5 pl-3 pr-10 text-xs font-mono focus:outline-none focus:border-amber-orange focus:ring-1 focus:ring-amber-orange/40"
-                      />
-                      {customApiKey ? (
-                        <button 
-                          onClick={handleClearApiKey}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-red-400 hover:text-red-300 transition-colors"
-                        >
-                          Clear
-                        </button>
-                      ) : (
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500">
-                          <Lock className="w-4 h-4" />
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div>
-                    {customApiKey ? (
-                      <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-lg flex items-center gap-2 text-emerald-400">
-                        <Check className="w-4 h-4" />
-                        <span className="text-xs font-mono">Key active & securely saved!</span>
-                      </div>
-                    ) : (
-                      <div className="p-3 bg-amber-950/20 border border-amber-500/20 rounded-lg flex items-start gap-2 text-amber-300">
-                        <Info className="w-4.5 h-4.5 shrink-0 mt-0.5" />
-                        <span className="text-[11px] leading-tight">
-                          No custom key? No problem! Try the rich curated presets below to see the complete features immediately.
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
 
       <main className="relative z-10">
 
@@ -641,7 +613,7 @@ export default function App() {
 
               <form onSubmit={handleGenerateTreatment} className="space-y-5">
                 
-                {/* Scene description prompt */}
+                 {/* Scene description prompt */}
                 <div>
                   <label className="block text-xs font-mono text-gray-400 mb-1.5 uppercase tracking-wider flex items-center justify-between">
                     <span>Scene Prompt / Script Excerpt</span>
@@ -655,6 +627,16 @@ export default function App() {
                     className="w-full bg-noir-950 text-white border border-noir-700 rounded-xl p-3 text-xs leading-relaxed focus:outline-none focus:border-amber-orange focus:ring-1 focus:ring-amber-orange/40"
                     id="input-scene-prompt"
                   />
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-gray-400 font-mono">
+                    <span className="text-amber-500/80">Romantic & kissing scene setups are allowed.</span>
+                    <button 
+                      type="button" 
+                      onClick={() => setShowRulesModal(true)} 
+                      className="text-amber-orange hover:underline font-mono uppercase font-semibold flex items-center gap-1 cursor-pointer"
+                    >
+                      <Scale className="w-3 h-3 text-amber-orange" /> Read Rules
+                    </button>
+                  </div>
                 </div>
 
                 {/* Grid inputs for configurations */}
@@ -734,15 +716,24 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* API Status Notice */}
-                {!customApiKey && (
+                {/* Subscription / AI Engine Notice */}
+                {!userSubscription.active ? (
                   <div className="p-3 bg-amber-950/15 border border-amber-500/20 rounded-xl flex gap-2.5">
                     <AlertCircle className="w-4 h-4 text-amber-orange shrink-0 mt-0.5" />
                     <div>
-                      <p className="text-[11px] font-medium text-amber-300">No Fireworks API Key provided</p>
+                      <p className="text-[11px] font-medium text-amber-300">Curated Library Mode Active</p>
                       <p className="text-[10px] text-gray-400 mt-0.5 leading-normal">
-                        Using curated database mode. You can view, copy, and export this lookbook perfectly. 
-                        To generate custom scenes, paste an API key in the <button type="button" onClick={() => setShowSandbox(true)} className="text-amber-orange underline font-medium hover:text-orange-400">Sandbox</button>.
+                        You are exploring pre-loaded high-fidelity treatments. To generate your own bespoke narrative pre-production guides, please purchase an active subscription plan below.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-3 bg-emerald-950/20 border border-emerald-500/20 rounded-xl flex gap-2.5">
+                    <Check className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-[11px] font-medium text-emerald-300">Cinematic AI Engine Ready</p>
+                      <p className="text-[10px] text-gray-400 mt-0.5 leading-normal">
+                        Your active {userSubscription.planName} has full access. Enter custom scripts to generate professional lookbooks instantly.
                       </p>
                     </div>
                   </div>
@@ -828,12 +819,14 @@ export default function App() {
                     >
                       Dismiss
                     </button>
-                    <button 
-                      onClick={() => setShowSandbox(true)}
-                      className="px-4 py-2 bg-amber-orange text-xs font-bold rounded-lg text-noir-950 hover:opacity-90"
-                    >
-                      Configure Key
-                    </button>
+                    {!userSubscription.active && (
+                      <a 
+                        href="#pricing"
+                        className="px-4 py-2 bg-amber-orange text-xs font-bold rounded-lg text-noir-950 hover:opacity-90 flex items-center justify-center"
+                      >
+                        View Pricing Plans
+                      </a>
+                    )}
                   </div>
                 </div>
               )}
@@ -1429,6 +1422,19 @@ export default function App() {
             NoirGen AI is an entry for the AMD Act II Hackathon. Built to empower independent filmmakers and speed up lookbook pre-production using high-speed Fireworks AI inference.
           </p>
 
+          <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-wider text-gray-400">
+            <a href="#about" className="hover:text-white transition-colors">About</a>
+            <a href="#presets" className="hover:text-white transition-colors">Presets</a>
+            <a href="#suite" className="hover:text-white transition-colors">Suite</a>
+            <a href="#pricing" className="hover:text-white transition-colors">Pricing</a>
+            <button 
+              onClick={() => setShowRulesModal(true)} 
+              className="text-amber-orange hover:text-orange-400 font-semibold flex items-center gap-1 transition-colors cursor-pointer"
+            >
+              <Scale className="w-3.5 h-3.5" /> Creative Rules
+            </button>
+          </div>
+
           <div className="text-[10px] font-mono text-gray-600">
             &copy; {new Date().getFullYear()} NoirGen AI. All Rights Reserved. Crafted with React, Tailwind, and Fireworks AI.
           </div>
@@ -1595,6 +1601,178 @@ export default function App() {
                 <p className="text-xs text-gray-400 mt-1">{currentTreatment.mood.tonality}</p>
               </div>
             </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Rules & Regulations */}
+      <AnimatePresence>
+        {showRulesModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-noir-950/80 backdrop-blur-sm no-print">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-noir-900 border border-noir-800 rounded-2xl w-full max-w-lg overflow-hidden relative shadow-2xl text-gray-200"
+            >
+              <div className="bg-gradient-to-r from-amber-950/30 via-orange-950/20 to-transparent p-6 pb-4 border-b border-noir-850">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Scale className="w-5 h-5 text-amber-orange" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-wider font-mono">Creative Guidelines & Rules</h3>
+                  </div>
+                  <button 
+                    onClick={() => setShowRulesModal(false)}
+                    className="p-1 rounded hover:bg-noir-800 text-gray-500 hover:text-gray-300"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-xs leading-relaxed">
+                <div className="p-3.5 bg-amber-950/20 border border-amber-500/20 rounded-xl space-y-1">
+                  <h4 className="font-bold text-amber-orange flex items-center gap-1">
+                    <ShieldAlert className="w-4 h-4" /> STRICT CONTENT MODERATION POLICY
+                  </h4>
+                  <p className="text-gray-400">
+                    To maintain a professional, secure, and compliant pre-production environment, our AI lookbook generator enforces standard content filtering.
+                  </p>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-bold text-white font-mono uppercase tracking-wide border-b border-noir-800 pb-1">Permitted Cinematic Content</h4>
+                  <p className="text-gray-400">
+                    You have <span className="text-emerald-400 font-semibold">full creative and genre freedom</span>! You can design, draft, and structure lookbooks for:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-300">
+                    <li><strong className="text-white">Multiple Genres</strong>: Horror, Suspense, Sci-Fi, Comedy, Thriller, Historical Drama, Action, etc.</li>
+                    <li><strong className="text-white">Romantic & Kissing Scenes</strong>: You are fully permitted to design sets, lighting ratios, lens profiles, and color schemes for intimate romantic scenes, hugging, embracing, or kissing.</li>
+                  </ul>
+                </div>
+
+                <div className="space-y-3">
+                  <h4 className="font-bold text-white font-mono uppercase tracking-wide border-b border-noir-800 pb-1">Strictly Prohibited Content</h4>
+                  <p className="text-gray-400">
+                    To prevent any abuse or policy issues, the following material is <span className="text-red-400 font-semibold">strictly forbidden</span>:
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1.5 text-gray-300">
+                    <li><strong className="text-red-400">Explicit Sexual Material</strong>: Any sexually explicit prompt, graphic depiction of sexual acts, or anatomical descriptions.</li>
+                    <li><strong className="text-red-400">Highly Sensual / Suggestive Descriptions</strong>: Prompts seeking to generate pornography, erotic art, or explicit nudity.</li>
+                  </ul>
+                </div>
+
+                <div className="p-3 bg-noir-950 rounded-lg border border-noir-850 text-gray-400 text-[11px]">
+                  <strong className="text-white">Subscription Penalty Note</strong>: Violating these rules will trigger an instant safety filter warning on the first attempt. A second violation will result in the <strong className="text-red-400">immediate cancellation of your subscription</strong> with policy violation logs, and a notice sent directly to your registered email address.
+                </div>
+              </div>
+
+              <div className="bg-noir-950 p-4 border-t border-noir-850 flex justify-end">
+                <button 
+                  onClick={() => setShowRulesModal(false)}
+                  className="px-5 py-2 bg-amber-orange text-noir-950 font-bold text-xs rounded-lg hover:opacity-95"
+                >
+                  I Understand
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Rule Violation Warning (1st violation) */}
+      <AnimatePresence>
+        {showViolationModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-noir-950/90 backdrop-blur-sm no-print">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-noir-900 border-2 border-amber-600 rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl text-gray-200"
+            >
+              <div className="bg-amber-950/40 p-6 pb-4 border-b border-amber-500/20 text-center">
+                <div className="w-14 h-14 bg-amber-950/80 text-amber-500 border border-amber-500/30 rounded-full flex items-center justify-center mx-auto shadow-lg mb-3 animate-bounce">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider font-mono">Rule Violation Warning!</h3>
+                <p className="text-xs text-amber-400 mt-1">First Policy Offense Recorded (1/2)</p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="bg-noir-950 p-4 rounded-xl border border-noir-800 space-y-2">
+                  <p className="text-xs font-mono text-gray-400 uppercase tracking-wider">Detection Logs:</p>
+                  <p className="text-xs text-red-300 font-medium italic">"{violationReason}"</p>
+                </div>
+
+                <div className="text-xs text-gray-300 space-y-2 leading-relaxed">
+                  <p>
+                    Our system has detected restricted or highly sensual/explicit terminology. 
+                  </p>
+                  <p>
+                    <strong className="text-white">Policy Reminder</strong>: Designing romantic set builds, mood boards, lighting schemas, and kissing scenes is perfectly permitted. However, graphic, sexual, or highly sensual descriptions are prohibited.
+                  </p>
+                  <p className="text-amber-300 font-semibold bg-amber-950/20 p-2.5 rounded border border-amber-500/10">
+                    ⚠️ CRITICAL: Attempting to bypass this safety filter a second time will immediately CANCEL your active subscription plan.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setShowViolationModal(false)}
+                  className="w-full bg-gradient-to-r from-amber-600 to-amber-500 text-noir-950 font-bold py-3 rounded-lg text-xs mt-4 transition-all hover:opacity-95"
+                >
+                  I Acknowledge & Will Revise Prompt
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: Subscription Cancelled due to Violation */}
+      <AnimatePresence>
+        {showCancelledModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-noir-950/95 backdrop-blur-md no-print">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-noir-900 border-2 border-red-600 rounded-2xl w-full max-w-md overflow-hidden relative shadow-2xl text-gray-200"
+            >
+              <div className="bg-red-950/40 p-6 pb-4 border-b border-red-500/20 text-center">
+                <div className="w-16 h-16 bg-red-950/80 text-red-500 border border-red-500/30 rounded-full flex items-center justify-center mx-auto shadow-lg mb-3 animate-pulse">
+                  <ShieldAlert className="w-10 h-10" />
+                </div>
+                <h3 className="text-base font-bold text-white uppercase tracking-wider font-mono">Subscription Terminated</h3>
+                <p className="text-xs text-red-400 mt-1">Rule Violation Final Action</p>
+              </div>
+
+              <div className="p-6 space-y-4">
+                <div className="bg-red-950/10 border border-red-500/20 p-4 rounded-xl text-center">
+                  <p className="text-xs text-gray-200 leading-relaxed font-semibold">
+                    Due to violation of our policy we canceled your subscription.
+                  </p>
+                  <p className="text-xs text-gray-400 mt-2">
+                    A confirmation email has been sent to your registered email address:
+                  </p>
+                  <p className="text-sm font-mono text-white font-bold underline decoration-red-500 mt-1">
+                    {cancelledEmailAddress || 'director@indiecinema.com'}
+                  </p>
+                </div>
+
+                <div className="text-xs text-gray-400 leading-relaxed text-center">
+                  <p>
+                    We maintain a strict zero-tolerance policy for sexually explicit or highly sensual material. Your account has been reverted to free tier. Any active payments have been stopped.
+                  </p>
+                </div>
+
+                <button 
+                  onClick={() => setShowCancelledModal(false)}
+                  className="w-full bg-red-600 text-white font-bold py-3 rounded-lg text-xs mt-4 hover:bg-red-700 transition-colors"
+                >
+                  Close & Acknowledge
+                </button>
+              </div>
+            </motion.div>
           </div>
         )}
       </AnimatePresence>
