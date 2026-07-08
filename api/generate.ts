@@ -17,9 +17,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Vercel Environment Variables se keys le rahe hain
     const geminiApiKey = process.env.GEMINI_API_KEY;
     const fireworksApiKey = process.env.FIREWORKS_API_KEY;
+    const geminiModelOverride = process.env.GEMINI_MODEL; // optional override like 'models/gemini-1.5'
 
     if (!geminiApiKey || !fireworksApiKey) {
-      return res.status(500).json({ error: 'Server configuration error: API keys missing.' });
+      return res.status(500).json({ error: 'Server configuration error: API keys missing. Ensure GEMINI_API_KEY and FIREWORKS_API_KEY are set.' });
     }
 
     const { genre = 'Noir', lighting = 'Chiaroscuro', aspect_ratio = '16:9' } = settings || {};
@@ -67,30 +68,56 @@ The JSON structure MUST match exactly this schema:
     const userPrompt = `Genre: ${genre}\nLighting Base: ${lighting}\nScene Description: ${prompt}`;
 
     // 1. Text JSON Generate using Gemini (select a model that supports generateContent)
-    const modelsListRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${geminiApiKey}`);
+    // Support two auth modes: API key in query param, or Bearer token in Authorization header.
+    const useBearer = geminiApiKey.trim().toLowerCase().startsWith('bearer ') || geminiApiKey.trim().startsWith('ya29.');
+
+    const listUrl = 'https://generativelanguage.googleapis.com/v1beta/models';
+    const listOpts: any = { method: 'GET', headers: { 'Content-Type': 'application/json' } };
+    if (!useBearer) {
+      // API key path
+      listOpts.headers = { 'Content-Type': 'application/json' };
+    } else {
+      // Bearer token path
+      listOpts.headers = { 'Content-Type': 'application/json', Authorization: geminiApiKey.trim().startsWith('bearer ') ? geminiApiKey.trim() : `Bearer ${geminiApiKey.trim()}` };
+    }
+
+    const modelsListRes = await fetch(useBearer ? listUrl : `${listUrl}?key=${encodeURIComponent(geminiApiKey)}`, listOpts);
     if (!modelsListRes.ok) {
-      throw new Error(`Failed to list Gemini models: ${await modelsListRes.text()}`);
+      const txt = await modelsListRes.text();
+      throw new Error(`Failed to list Gemini models (status ${modelsListRes.status}): ${txt}. Ensure the key/token is valid and has access to the Generative Language API.`);
     }
 
     const modelsList = await modelsListRes.json();
     const modelsArray = Array.isArray(modelsList.models) ? modelsList.models : [];
 
-    const pick = modelsArray.find((m: any) => {
-      const name = String(m.name || '').toLowerCase();
-      const display = String(m.displayName || '').toLowerCase();
-      const methods = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
-      return (name.includes('gemini') || display.includes('gemini')) && methods.includes('generateContent');
-    }) || modelsArray.find((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'));
+    let modelName: string | undefined = undefined;
+    if (geminiModelOverride) modelName = geminiModelOverride;
 
-    if (!pick) {
-      const available = modelsArray.map((m: any) => `${m.name || m.displayName || 'unknown'}`).join(', ');
-      throw new Error(`No model found that supports generateContent. Available models: ${available}`);
+    if (!modelName) {
+      const pick = modelsArray.find((m: any) => {
+        const name = String(m.name || '').toLowerCase();
+        const display = String(m.displayName || '').toLowerCase();
+        const methods = Array.isArray(m.supportedGenerationMethods) ? m.supportedGenerationMethods : [];
+        return (name.includes('gemini') || display.includes('gemini')) && methods.includes('generateContent');
+      }) || modelsArray.find((m: any) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'));
+
+      if (!pick) {
+        const available = modelsArray.map((m: any) => `${m.name || m.displayName || 'unknown'}`).join(', ');
+        throw new Error(`No model found that supports generateContent. Available models: ${available}`);
+      }
+
+      modelName = pick.name || pick.displayName;
     }
 
-    const modelName = pick.name || pick.displayName;
-    const geminiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`, {
+    // Build request URL and headers for generateContent
+    const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelName)}:generateContent`;
+    const genOpts: any = { method: 'POST', headers: { 'Content-Type': 'application/json' } };
+    if (useBearer) genOpts.headers.Authorization = geminiApiKey.trim().startsWith('bearer ') ? geminiApiKey.trim() : `Bearer ${geminiApiKey.trim()}`;
+    const finalUrl = useBearer ? generateUrl : `${generateUrl}?key=${encodeURIComponent(geminiApiKey)}`;
+
+    const geminiResponse = await fetch(finalUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: genOpts.headers,
       body: JSON.stringify({
         contents: [{ parts: [{ text: systemPrompt + "\n\n" + userPrompt }] }],
         generationConfig: { temperature: 0.7 }
@@ -103,23 +130,38 @@ The JSON structure MUST match exactly this schema:
 
     const geminiData = await geminiResponse.json();
     let jsonString = '';
-    if (geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
-      jsonString = geminiData.candidates[0].content.parts[0].text.trim();
-    } else if (geminiData?.candidates?.[0]?.text) {
-      jsonString = geminiData.candidates[0].text.trim();
-    } else if (geminiData?.output?.[0]?.content?.text) {
-      jsonString = geminiData.output[0].content.text.trim();
-    } else if (typeof geminiData?.content === 'string') {
-      jsonString = geminiData.content.trim();
-    } else {
-      throw new Error('Unexpected Gemini response format: ' + JSON.stringify(geminiData).slice(0, 1000));
+    try {
+      if (geminiData?.candidates?.[0]?.content?.parts?.[0]?.text) {
+        jsonString = geminiData.candidates[0].content.parts[0].text.trim();
+      } else if (geminiData?.candidates?.[0]?.text) {
+        jsonString = geminiData.candidates[0].text.trim();
+      } else if (geminiData?.output?.[0]?.content?.text) {
+        jsonString = geminiData.output[0].content.text.trim();
+      } else if (typeof geminiData?.content === 'string') {
+        jsonString = geminiData.content.trim();
+      } else if (typeof geminiData === 'string') {
+        jsonString = geminiData.trim();
+      }
+    } catch (parseErr) {
+      console.warn('Warning: unexpected Gemini response shape', parseErr, geminiData);
+    }
+
+    if (!jsonString) {
+      // If we couldn't extract structured content, return raw response for debugging
+      throw new Error(`Could not extract generated text from Gemini response. Raw response: ${JSON.stringify(geminiData).slice(0, 2000)}`);
     }
     
     if (jsonString.startsWith('```json')) jsonString = jsonString.substring(7);
     else if (jsonString.startsWith('```')) jsonString = jsonString.substring(3);
     if (jsonString.endsWith('```')) jsonString = jsonString.substring(0, jsonString.length - 3);
 
-    const treatment = JSON.parse(jsonString.trim());
+    let treatment;
+    try {
+      treatment = JSON.parse(jsonString.trim());
+    } catch (e) {
+      // If parsing fails, include the raw text for debugging
+      throw new Error('Failed to parse JSON from model output. Raw output: ' + jsonString.slice(0, 2000));
+    }
 
     // 2. Image Generate using FLUX.1 [schnell] via Fireworks
     let imageBase64 = null;
