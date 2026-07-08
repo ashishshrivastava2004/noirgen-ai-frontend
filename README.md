@@ -1,20 +1,11 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# NoirGen AI — High-End Cinematic Pre-Production Visual Treatment Suite
 
-# Run and deploy your AI Studio app
+NoirGen AI is a premium visual consultant and pre-production assistant designed for filmmakers. It leverages AI to analyze scene descriptions and generate comprehensive cinematic treatments.
 
-This contains everything you need to run your app locally.
+## 🎬 Key Features
+* **Cinematic Visual Treatments:** Generates professional-grade production breakdowns.
+* **Wong Kar-wai Inspired Aesthetic:** Focus on mood, shadow, and neon contrast[cite: 30].
 
-View your app in AI Studio: https://ai.studio/apps/3f4d3c28-d492-4acc-82fa-3febe3c6e317
-
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+## 🛠️ Technology Stack
+* **Gemini API:** Powers the JSON-based visual treatment reasoning[cite: 30].
+* **Fireworks AI (Flux.1):** High-fidelity image generation[cite: 30].
