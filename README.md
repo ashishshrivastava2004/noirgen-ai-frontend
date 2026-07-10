@@ -5,8 +5,7 @@
   
   <br/>
   
-  [![Live Demo](https://noirgenai.vercel.app/)
-  [![Pitch Video](https://drive.google.com/file/d/13Y95bz8kQfutja6OAJgqenY3MD4eAhea/view?usp=drive_link)](#)
+  
 </div>
 
 ---
