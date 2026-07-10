@@ -1,76 +1,88 @@
-import express from 'express';
-import dotenv from 'dotenv';
+import { GoogleGenAI, Type } from '@google/genai';
+import OpenAI from 'openai';
+import type { VercelRequest, VercelResponse } from '@vercel/node';
 
-// Load environment variables
-dotenv.config();
+// Initialize clients outside the handler for warm starts
+const aiClient = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+const fireworksClient = new OpenAI({
+  apiKey: process.env.FIREWORKS_API_KEY!,
+  baseURL: "https://api.fireworks.ai/inference/v1",
+});
 
-const app = express();
-const port = process.env.PORT || 3000;
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
-// Middleware to parse JSON bodies
-app.use(express.json());
-
-// ---------------------------------------------------------
-// POST /api/generate - HACKATHON DEMO ENDPOINT
-// ---------------------------------------------------------
-app.post('/api/generate', async (req, res) => {
   try {
-    const { prompt } = req.body;
+    const { prompt, settings } = req.body;
+    console.log(`Serverless: Received prompt for Hybrid Generation`);
 
-    console.log(`Received prompt for generation: ${prompt}`);
+    const { genre = 'Noir', lighting = 'Chiaroscuro', aspect_ratio = '16:9' } = settings || {};
 
-    // Returning the simulated high-quality mock output for the demo video
-    return res.status(200).json({
-      success: true,
-      engine: 'Gemini + Fireworks (Simulated for Demo)',
-      treatment: {
-        mood: {
-          title: "Neon Gridlock: The Cyber-Detective",
-          description: "A gritty cyber-detective navigates a claustrophobic, rain-slicked alley in Neo-Tokyo. Dense steam rolls off the wet asphalt, beautifully catching the flickering magenta and cyan glow from the towering holographic signs above.",
-          tonality: "Cyberpunk Noir, isolating, gritty, and technologically overwhelming.",
-          lighting: "High-contrast neon practicals. Dominant magenta and cyan rim lights piercing through dense volumetric steam, creating a chiaroscuro effect on the detective's silhouette.",
-          vibeElements: ["Rain-slicked asphalt", "Flickering magenta/cyan neon", "Volumetric rising steam"]
-        },
-        palette: {
-          reasoning: "Magenta and cyan create the classic cyberpunk dichotomy—technological coldness versus aggressive synthetic warmth.",
-          colors: [
-            { hex: "#FF00FF", name: "Synthetic Magenta", description: "Harsh neon glow from the signage." },
-            { hex: "#00FFFF", name: "Gridlock Cyan", description: "Cool ambient light reflecting off the wet pavement." },
-            { hex: "#1A1B26", name: "Asphalt Void", description: "Deep, crushing shadows in the unlit alley corners." },
-            { hex: "#4A0072", name: "Deep Purple Haze", description: "The color of the steam mixing with the neon lights." }
-          ]
-        },
-        camera: {
-          format: "ARRI ALEXA Mini LF",
-          lens: "Panavision Anamorphic C-Series 40mm",
-          focalLength: "40mm",
-          aperture: "T2.0",
-          movement: "Slow, deliberate Steadicam tracking shot from behind, keeping the detective centered as the neon signs pass overhead.",
-          composition: "One-point perspective focusing down the vanishing point of the narrow alley, heavy lower-third reflections.",
-          directorNotes: "Emphasize the loneliness of the character. Let the neon reflections in the puddles tell the story of the city above."
-        },
-        vfx3d: {
-          hdriSetup: "Nighttime Neo-Tokyo Alley HDRI (Wet)",
-          softwareWorkflow: "Unreal Engine 5.4 Lumen with Niagara for rain and steam sims",
-          vfxElements: "Dense volumetric steam particles, interactive puddle ripples, anamorphic lens flares",
-          ambientSetup: "High-density height fog, raytraced screen space reflections set to 0.02 roughness for maximum puddle clarity"
-        }
+    let treatment: any = null;
+
+    const systemPromptGemini = `You are NoirGen AI, an elite visual consultant and camera director for premium cinema.
+Your task is to analyze the user's scene description and generate a complete high-end production-ready visual treatment.
+CRITICAL VISUAL RULES: Ensure character descriptions dictate perfectly clean faces, explicitly avoiding any specific markings or a red tilak. When describing modern characters, always seamlessly include contemporary accessories like modern headphones to fit the aesthetic.
+Ensure all hex codes are valid, uppercase, and have 4 distinct colors.`;
+
+    const userPrompt = `Genre: ${genre}\nLighting Base: ${lighting}\nScene Description: ${prompt}`;
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        mood: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, description: { type: Type.STRING }, tonality: { type: Type.STRING }, lighting: { type: Type.STRING }, vibeElements: { type: Type.ARRAY, items: { type: Type.STRING } } }, required: ["title", "description", "tonality", "lighting", "vibeElements"] },
+        palette: { type: Type.OBJECT, properties: { reasoning: { type: Type.STRING }, colors: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { hex: { type: Type.STRING }, name: { type: Type.STRING }, description: { type: Type.STRING } }, required: ["hex", "name", "description"] } } }, required: ["reasoning", "colors"] },
+        camera: { type: Type.OBJECT, properties: { format: { type: Type.STRING }, lens: { type: Type.STRING }, focalLength: { type: Type.STRING }, aperture: { type: Type.STRING }, movement: { type: Type.STRING }, composition: { type: Type.STRING }, directorNotes: { type: Type.STRING } }, required: ["format", "lens", "focalLength", "aperture", "movement", "composition", "directorNotes"] },
+        vfx3d: { type: Type.OBJECT, properties: { hdriSetup: { type: Type.STRING }, softwareWorkflow: { type: Type.STRING }, vfxElements: { type: Type.STRING }, ambientSetup: { type: Type.STRING } }, required: ["hdriSetup", "softwareWorkflow", "vfxElements", "ambientSetup"] }
       },
-      // Cyberpunk Neo-Tokyo Image Placeholder for Demo Video
-      image: "https://images.unsplash.com/photo-1555448248-2571daf6344b?auto=format&fit=crop&w=2000&q=80"
-    });
+      required: ["mood", "palette", "camera", "vfx3d"]
+    };
 
-  } catch (error) {
-    console.error("Error generating cinematic treatment:", error);
-    return res.status(500).json({ 
-        success: false, 
-        error: "Internal Server Error during generation" 
-    });
+    // Hybrid execution
+    const [fireworksResponse, aiResponse] = await Promise.all([
+      fireworksClient.chat.completions.create({
+        model: "accounts/fireworks/models/llama-v3-1-8b-instruct", 
+        messages: [{ role: "user", content: `Write a punchy, 1-sentence cinematic tagline for a ${genre} scene described as: ${prompt}. Do not use quotes.` }]
+      }).catch(err => {
+        console.error("Fireworks tagline failed:", err);
+        return { choices: [{ message: { content: "A Cinematic Vision Brought to Life." } }] }; 
+      }),
+
+      aiClient.models.generateContent({
+        model: 'gemini-3.5-flash',
+        contents: [{ text: systemPromptGemini }, { text: userPrompt }],
+        config: { responseMimeType: 'application/json', responseSchema: responseSchema, temperature: 0.9 }
+      })
+    ]);
+
+    treatment = JSON.parse(aiResponse.text()!.trim());
+    treatment.tagline = fireworksResponse.choices[0].message.content.replace(/["']/g, ""); 
+
+    // Image generation
+    let imageBase64 = null;
+    const imagePrompt = `Cinematic film still, high-end production visual treatment, highly detailed, film grain, ${genre} genre, lighting: ${lighting}. ${prompt}. Subject wearing modern headphones. Clean face, no specific markings, no red tilak. Shot on ${treatment.camera?.lens || 'Anamorphic lens'}, 8k resolution, photorealistic, masterpiece.`;
+
+    try {
+      const imageResponse = await aiClient.models.generateContent({
+        model: 'gemini-3.1-flash-lite-image',
+        contents: { parts: [{ text: imagePrompt }] },
+        config: { imageConfig: { aspectRatio: aspect_ratio === '16:9' ? '16:9' : '4:3' } }
+      });
+
+      for (const part of imageResponse.candidates?.[0]?.content?.parts || []) {
+        if (part.inlineData) {
+          imageBase64 = `data:image/png;base64,${part.inlineData.data}`;
+          break;
+        }
+      }
+    } catch (imgError: any) {
+      console.error('Failed to generate image:', imgError.message || imgError);
+    }
+
+    return res.status(200).json({ success: true, treatment, image: imageBase64, engine: 'Hybrid (Gemini + Fireworks)' });
+
+  } catch (error: any) {
+    console.error("API Error:", error);
+    return res.status(500).json({ success: false, error: error.message || "Internal Server Error" });
   }
-});
-
-// Start the Express server
-app.listen(port, () => {
-  console.log(`NoirGen AI Server is running smoothly at http://localhost:${port}`);
-  console.log(`Ready for hackathon demo!`);
-});
+}
