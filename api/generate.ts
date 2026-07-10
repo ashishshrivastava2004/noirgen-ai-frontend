@@ -57,7 +57,7 @@ app.post('/api/generate', async (req, res) => {
         }
       },
       // Cyberpunk Neo-Tokyo Image Placeholder for Demo Video
-      image: "https://images.unsplash.com/photo-1555448248-2571daf6344b?auto=format&fit=crop&w=2000&q=80"
+      image: "https://drive.google.com/file/d/1iDGs-PJtMFpz6cgCync0BclVN_3_3Tl2/view?usp=drive_link"
     });
 
   } catch (error) {

@@ -1493,7 +1493,7 @@ export default function App() {
           </div>
 
           <p className="max-w-md mx-auto leading-relaxed">
-            NoirGen AI is an entry for the AMD Act II Hackathon. Built to empower independent filmmakers and speed up lookbook pre-production using high-speed Fireworks AI inference.
+            NoirGen AI is a tool built to empower independent filmmakers and speed up lookbook pre-production.
           </p>
 
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-[11px] font-mono uppercase tracking-wider text-gray-400">
@@ -1510,7 +1510,7 @@ export default function App() {
           </div>
 
           <div className="text-[10px] font-mono text-gray-600">
-            &copy; {new Date().getFullYear()} NoirGen AI. All Rights Reserved. Crafted with React, Tailwind, and Fireworks AI.
+            &copy; {new Date().getFullYear()} © 2026 Developed by Neon Noir Labs
           </div>
         </div>
       </footer>
@@ -1614,7 +1614,7 @@ export default function App() {
                       type="submit"
                       className="w-full bg-gradient-to-r from-amber-orange to-amber-500 text-noir-950 font-bold py-3 rounded-lg text-xs mt-6 transition-opacity hover:opacity-95"
                     >
-                      Process Mock Subscription
+                      Process Subscription
                     </button>
                   </form>
                 ) : (
@@ -1625,7 +1625,7 @@ export default function App() {
                     <div>
                       <h4 className="text-sm font-bold text-white">Subscription Active!</h4>
                       <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
-                        Thank you, <span className="text-white font-semibold">{checkoutName}</span>. Your mock checkout for the <span className="text-white font-semibold">{selectedPlan}</span> was processed. Elite pre-production features are now unlocked.
+                        Thank you, <span className="text-white font-semibold">{checkoutName}</span>. Your subscription for the <span className="text-white font-semibold">{selectedPlan}</span> was processed. Elite pre-production features are now unlocked.
                       </p>
                     </div>
                     <button 
